@@ -5,6 +5,14 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+# support parallel build using DEB_BUILD_OPTIONS=parallel=N
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  MAKEFLAGS += -j$(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+endif
+
+# This has to be exported to make some magic below work.
+export DH_OPTIONS
+
 # These are used for cross-compiling and for saving the configure script
 # from having to guess our platform (since we know it already)
 DEB_HOST_GNU_TYPE   ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
@@ -67,12 +75,6 @@ install-stamp: build
 		LDFLAGS="$(LDFLAGS)" \
 		EXLDFLAGS="$(LDFLAGS)"
 
-
-	# Install extra files as needed
-	install -m 0644 debian/sensord.logcheck debian/sensord/etc/logcheck/ignore.d.server/sensord
-	install -m 0644 debian/sensord.logcheck debian/sensord/etc/logcheck/ignore.d.workstation/sensord
-	install -m 0644 debian/lm-sensors.service debian/lm-sensors/lib/systemd/system/
-
 	# Make sure /etc/sensors.d/ is not removed
 	touch debian/tmp/etc/sensors.d/.placeholder
 
@@ -100,7 +102,9 @@ binary-indep: build install
 	dh_testroot
 	dh_installchangelogs -i CHANGES
 	dh_installdocs -i -XCVS
-	dh_installinit -pfancontrol --restart-after-upgrade -- start 20 2 3 4 5 .
+	dh_systemd_enable -pfancontrol
+	dh_installinit -pfancontrol --restart-after-upgrade
+	dh_systemd_start -pfancontrol
 	dh_installman -i
 	dh_link -i
 	dh_compress -i
@@ -117,8 +121,11 @@ binary-arch: build install
 	dh_installchangelogs -s CHANGES
 	dh_installdocs -s -XCVS
 	dh_installexamples -s -XCVS -XModule.mk
-	dh_installinit -plm-sensors --no-start -- start 47 S .
-	dh_installinit -psensord -- start 20 2 3 4 5 .
+	dh_systemd_enable -plm-sensors
+	dh_systemd_start -plm-sensors
+	dh_installinit -plm-sensors --no-start
+	dh_installinit -psensord
+	dh_installlogcheck -s
 	dh_installman -s
 	dh_link -s
 	dh_strip -s
